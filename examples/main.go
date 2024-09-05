@@ -37,4 +37,11 @@ func scene1(context *cairo.Context, width, height, percent float64) {
 	path.AddXY(800, 500)
 	path.AddXY(900, 700)
 	p.Path(context, path, false, 50000)
+
+	p.MoveTo(300, 400)
+	for range 5000 {
+		p.MoveTowards(300, 400)
+		p.Update(context)
+	}
+	context.Stroke()
 }
