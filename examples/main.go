@@ -24,24 +24,21 @@ func main() {
 
 func scene1(context *cairo.Context, width, height, percent float64) {
 	context.BlackOnWhite()
-	p := scribble.NewPen(0, 0)
+	p := scribble.NewPen(context, 0, 0)
 
-	p.Line(context, 80, 100, 80, 700, 50000)
-	p.Ellipse(context, 300, 400, 120, 300, 100000)
-	p.Circle(context, 600, 200, 100, 50000)
-	p.Rectangle(context, 500, 400, 200, 300, 50000)
+	p.Line(80, 100, 80, 700, 50000)
+	p.Ellipse(300, 400, 120, 300, 100000)
+	p.Dot(300, 400, 5000)
+	p.Circle(600, 200, 100, 50000)
+	p.Rectangle(500, 400, 200, 300, 70000)
 
 	path := geom.NewPointList()
 	path.AddXY(800, 100)
-	path.AddXY(900, 300)
-	path.AddXY(800, 500)
-	path.AddXY(900, 700)
-	p.Path(context, path, false, 50000)
+	path.AddXY(950, 200)
+	path.AddXY(800, 300)
+	path.AddXY(950, 400)
+	p.Path(path, false, 50000)
 
-	p.MoveTo(300, 400)
-	for range 5000 {
-		p.MoveTowards(300, 400)
-		p.Update(context)
-	}
-	context.Stroke()
+	p.Arc(875, 600, 100, 1, -1, false, 30000)
+
 }

@@ -13,10 +13,11 @@ import (
 // Pen represents a pen drawing a scribbled line.
 type Pen struct {
 	x, y, vx, vy, vr, damp, step, curl, pull, reverse float64
+	context                                           *cairo.Context
 }
 
 // NewPen creates a new pen object.
-func NewPen(x, y float64) *Pen {
+func NewPen(context *cairo.Context, x, y float64) *Pen {
 	Pen := &Pen{
 		x:       x,
 		y:       y,
@@ -26,6 +27,7 @@ func NewPen(x, y float64) *Pen {
 		damp:    0.7,
 		step:    1,
 		reverse: 0.5,
+		context: context,
 	}
 	Pen.SetPull(30)
 	Pen.SetCurl(30)
@@ -41,6 +43,7 @@ func (p *Pen) Position() (float64, float64) {
 func (p *Pen) MoveTo(x, y float64) {
 	p.x = x
 	p.y = y
+	p.context.MoveTo(x, y)
 }
 
 // SetCurl sets how much curl the scribbles will have.
@@ -80,11 +83,11 @@ func (p *Pen) SetStep(s float64) {
 }
 
 // Update updates and draws the path of this pen.
-func (p *Pen) Update(context *cairo.Context) {
-	context.MoveTo(p.x, p.y)
+func (p *Pen) Update() {
+	p.context.MoveTo(p.x, p.y)
 	p.x += p.vx
 	p.y += p.vy
-	context.LineTo(p.x, p.y)
+	p.context.LineTo(p.x, p.y)
 
 	p.vr += random.FloatRange(-p.curl*p.reverse, p.curl)
 	p.vx += math.Cos(p.vr) * p.step
@@ -105,7 +108,7 @@ func (p *Pen) MoveTowards(x, y float64) {
 
 // Line draws a single scribbled line from one point to another,
 // with a specified number of iterations.
-func (p *Pen) Line(context *cairo.Context, x0, y0, x1, y1 float64, count int) {
+func (p *Pen) Line(x0, y0, x1, y1 float64, count int) {
 	countf := float64(count)
 	p.MoveTo(x0, y0)
 	for i := range count {
@@ -113,14 +116,14 @@ func (p *Pen) Line(context *cairo.Context, x0, y0, x1, y1 float64, count int) {
 		x := blmath.Map(f, 0, countf, x0, x1)
 		y := blmath.Map(f, 0, countf, y0, y1)
 		p.MoveTowards(x, y)
-		p.Update(context)
+		p.Update()
 	}
-	context.Stroke()
+	p.context.Stroke()
 }
 
 // Circle draws a single scribbled circle,
 // with the specified center, radius and number of iterations.
-func (p *Pen) Circle(context *cairo.Context, xc, yc, radius float64, count int) {
+func (p *Pen) Circle(xc, yc, radius float64, count int) {
 	countf := float64(count)
 	p.MoveTo(xc+radius, yc)
 	for i := range count {
@@ -129,14 +132,37 @@ func (p *Pen) Circle(context *cairo.Context, xc, yc, radius float64, count int) 
 		x := xc + math.Cos(a)*radius
 		y := yc + math.Sin(a)*radius
 		p.MoveTowards(x, y)
-		p.Update(context)
+		p.Update()
 	}
-	context.Stroke()
+	p.context.Stroke()
+}
+
+// Arc draws a single scribbled arc,
+// with the specified center, radius, start and end angle, cw/ccw, and number of iterations.
+func (p *Pen) Arc(xc, yc, radius, start, end float64, ccw bool, count int) {
+	countf := float64(count)
+	p.MoveTo(xc+math.Cos(start)*radius, yc+math.Sin(start)*radius)
+	start = blmath.WrapTau(start)
+	end = blmath.WrapTau(end)
+	for i := range count {
+		f := float64(i)
+		a := f / countf * (end - start)
+		if ccw {
+			a = start - a
+		} else {
+			a = start + a
+		}
+		x := xc + math.Cos(a)*radius
+		y := yc + math.Sin(a)*radius
+		p.MoveTowards(x, y)
+		p.Update()
+	}
+	p.context.Stroke()
 }
 
 // Ellipse draws a single scribbled ellipse,
 // with the specified center, radii and number of iterations.
-func (p *Pen) Ellipse(context *cairo.Context, xc, yc, xr, yr float64, count int) {
+func (p *Pen) Ellipse(xc, yc, xr, yr float64, count int) {
 	countf := float64(count)
 	p.MoveTo(xc+xr, yc)
 	for i := range count {
@@ -145,47 +171,56 @@ func (p *Pen) Ellipse(context *cairo.Context, xc, yc, xr, yr float64, count int)
 		x := xc + math.Cos(a)*xr
 		y := yc + math.Sin(a)*yr
 		p.MoveTowards(x, y)
-		p.Update(context)
+		p.Update()
 	}
-	context.Stroke()
+	p.context.Stroke()
 }
 
 // Rectangle draws a single scribbled rectangle
 // with the specified x, y, width, height and number of iterations.
-func (p *Pen) Rectangle(context *cairo.Context, x0, y0, w, h float64, count int) {
+func (p *Pen) Rectangle(x0, y0, w, h float64, count int) {
 	countf := float64(count)
 	p.MoveTo(x0, y0)
 	xCount := countf / 2 * w / (w + h)
 	yCount := countf/2 - xCount
-	p.Line(context, x0, y0, x0+w, y0, int(xCount))
-	p.Line(context, x0+w, y0, x0+w, y0+h, int(yCount))
-	p.Line(context, x0, y0+h, x0+w, y0+h, int(xCount))
-	p.Line(context, x0, y0, x0, y0+h, int(yCount))
-	context.Stroke()
+	p.Line(x0, y0, x0+w, y0, int(xCount))
+	p.Line(x0+w, y0, x0+w, y0+h, int(yCount))
+	p.Line(x0, y0+h, x0+w, y0+h, int(xCount))
+	p.Line(x0, y0, x0, y0+h, int(yCount))
+	p.context.Stroke()
 }
 
-// TODO:
-// Triangle
-// Ellipse
-
 // Path draws a scribbled path between a list of points.
-func (p *Pen) Path(context *cairo.Context, points geom.PointList, closed bool, count int) {
+func (p *Pen) Path(points geom.PointList, closed bool, count int) {
 	countf := float64(count)
 	length := points.Length()
 	if closed {
 		length += points.First().Distance(points.Last())
 	}
-	context.MoveTo(points.First().X, points.First().Y)
+	p.MoveTo(points.First().X, points.First().Y)
 	for i := range len(points) - 1 {
 		p0 := points[i]
 		p1 := points[i+1]
 		dist := p0.Distance(p1)
-		p.Line(context, p0.X, p0.Y, p1.X, p1.Y, int(countf/length*dist))
+		p.Line(p0.X, p0.Y, p1.X, p1.Y, int(countf/length*dist))
 	}
 	if closed {
 		dist := points.First().Distance(points.Last())
-		p.Line(context, points.First().X, points.First().Y, points.Last().X, points.Last().Y, int(countf/length*dist))
+		p.Line(points.First().X, points.First().Y, points.Last().X, points.Last().Y, int(countf/length*dist))
 	}
-	context.Stroke()
-
+	p.context.Stroke()
 }
+
+// Dot scribbles a dot at the specified location.
+func (p *Pen) Dot(x, y float64, count int) {
+	p.MoveTo(x, y)
+	for range count {
+		p.MoveTowards(x, y)
+		p.Update()
+	}
+	p.context.Stroke()
+}
+
+// TODO:
+// Arc
+// beziers
