@@ -222,5 +222,4 @@ func (p *Pen) Dot(x, y float64, count int) {
 }
 
 // TODO:
-// Arc
 // beziers
