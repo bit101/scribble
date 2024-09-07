@@ -7,18 +7,17 @@ import (
 	"github.com/bit101/bitlib/blmath"
 	"github.com/bit101/bitlib/geom"
 	"github.com/bit101/bitlib/random"
-	cairo "github.com/bit101/blcairo"
 )
 
 // Pen represents a pen drawing a scribbled line.
 type Pen struct {
 	x, y, vx, vy, vr, damp, step, curl, pull, reverse float64
-	context                                           *cairo.Context
+	points                                            []geom.PointList
 }
 
 // NewPen creates a new pen object.
-func NewPen(context *cairo.Context, x, y float64) *Pen {
-	Pen := &Pen{
+func NewPen(x, y float64) *Pen {
+	pen := &Pen{
 		x:       x,
 		y:       y,
 		vx:      0,
@@ -27,15 +26,15 @@ func NewPen(context *cairo.Context, x, y float64) *Pen {
 		damp:    0.7,
 		step:    1,
 		reverse: 0.5,
-		context: context,
 	}
-	Pen.SetPull(30)
-	Pen.SetCurl(30)
-	return Pen
+	pen.SetPull(30)
+	pen.SetCurl(30)
+	pen.points = []geom.PointList{}
+	return pen
 }
 
 // Position returns the pen's current x, y position.
-func (p *Pen) Position() (float64, float64) {
+func (p *Pen) GetPosition() (float64, float64) {
 	return p.x, p.y
 }
 
@@ -43,7 +42,8 @@ func (p *Pen) Position() (float64, float64) {
 func (p *Pen) MoveTo(x, y float64) {
 	p.x = x
 	p.y = y
-	p.context.MoveTo(x, y)
+	p.points = append(p.points, geom.NewPointList())
+	p.addCurrentPoint()
 }
 
 // SetCurl sets how much curl the scribbles will have.
@@ -84,10 +84,9 @@ func (p *Pen) SetStep(s float64) {
 
 // Update updates and draws the path of this pen.
 func (p *Pen) Update() {
-	p.context.MoveTo(p.x, p.y)
 	p.x += p.vx
 	p.y += p.vy
-	p.context.LineTo(p.x, p.y)
+	p.addCurrentPoint()
 
 	p.vr += random.FloatRange(-p.curl*p.reverse, p.curl)
 	p.vx += math.Cos(p.vr) * p.step
@@ -96,14 +95,28 @@ func (p *Pen) Update() {
 	p.vy *= p.damp
 }
 
-// MoveTowards pulls a pen towards this location.
-// Multiple MoveTowards can be called and the point will tend towards the average of these.
-func (p *Pen) MoveTowards(x, y float64) {
+func (p *Pen) addCurrentPoint() {
+	p.points[len(p.points)-1].AddXY(p.x, p.y)
+}
+
+// ClearAll deletes all points on all paths.
+func (p *Pen) ClearAll() {
+	p.points = []geom.PointList{}
+}
+
+// PullTowards pulls a pen towards this location.
+// Multiple PullTowards can be called and the point will tend towards the average of these.
+func (p *Pen) PullTowards(x, y float64) {
 	dx := x - p.x
 	dy := y - p.y
 	angle := math.Atan2(dy, dx)
 	p.vx += math.Cos(angle) * p.pull
 	p.vy += math.Sin(angle) * p.pull
+}
+
+// GetPoints returns the list of list of points.
+func (p *Pen) GetPoints() []geom.PointList {
+	return p.points
 }
 
 // Line draws a single scribbled line from one point to another,
@@ -115,10 +128,9 @@ func (p *Pen) Line(x0, y0, x1, y1 float64, count int) {
 		f := float64(i)
 		x := blmath.Map(f, 0, countf, x0, x1)
 		y := blmath.Map(f, 0, countf, y0, y1)
-		p.MoveTowards(x, y)
+		p.PullTowards(x, y)
 		p.Update()
 	}
-	p.context.Stroke()
 }
 
 // Circle draws a single scribbled circle,
@@ -131,10 +143,9 @@ func (p *Pen) Circle(xc, yc, radius float64, count int) {
 		a := f / countf * blmath.Tau
 		x := xc + math.Cos(a)*radius
 		y := yc + math.Sin(a)*radius
-		p.MoveTowards(x, y)
+		p.PullTowards(x, y)
 		p.Update()
 	}
-	p.context.Stroke()
 }
 
 // Arc draws a single scribbled arc,
@@ -154,10 +165,9 @@ func (p *Pen) Arc(xc, yc, radius, start, end float64, ccw bool, count int) {
 		}
 		x := xc + math.Cos(a)*radius
 		y := yc + math.Sin(a)*radius
-		p.MoveTowards(x, y)
+		p.PullTowards(x, y)
 		p.Update()
 	}
-	p.context.Stroke()
 }
 
 // Ellipse draws a single scribbled ellipse,
@@ -170,10 +180,9 @@ func (p *Pen) Ellipse(xc, yc, xr, yr float64, count int) {
 		a := f / countf * blmath.Tau
 		x := xc + math.Cos(a)*xr
 		y := yc + math.Sin(a)*yr
-		p.MoveTowards(x, y)
+		p.PullTowards(x, y)
 		p.Update()
 	}
-	p.context.Stroke()
 }
 
 // Rectangle draws a single scribbled rectangle
@@ -187,7 +196,6 @@ func (p *Pen) Rectangle(x0, y0, w, h float64, count int) {
 	p.Line(x0+w, y0, x0+w, y0+h, int(yCount))
 	p.Line(x0, y0+h, x0+w, y0+h, int(xCount))
 	p.Line(x0, y0, x0, y0+h, int(yCount))
-	p.context.Stroke()
 }
 
 // Path draws a scribbled path between a list of points.
@@ -208,17 +216,15 @@ func (p *Pen) Path(points geom.PointList, closed bool, count int) {
 		dist := points.First().Distance(points.Last())
 		p.Line(points.First().X, points.First().Y, points.Last().X, points.Last().Y, int(countf/length*dist))
 	}
-	p.context.Stroke()
 }
 
 // Dot scribbles a dot at the specified location.
 func (p *Pen) Dot(x, y float64, count int) {
 	p.MoveTo(x, y)
 	for range count {
-		p.MoveTowards(x, y)
+		p.PullTowards(x, y)
 		p.Update()
 	}
-	p.context.Stroke()
 }
 
 // TODO:

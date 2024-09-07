@@ -41,4 +41,8 @@ func scene1(context *cairo.Context, width, height, percent float64) {
 
 	p.Arc(875, 600, 100, 1, -1, false, 30000)
 
+	for _, list := range p.GetPoints() {
+		context.StrokePath(list, false)
+	}
+
 }
