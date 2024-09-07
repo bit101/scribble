@@ -1,6 +1,6 @@
 # scribble
 
-Scribble is an add on library for [blcairo](http://github.com/bit101/blcairo) to draw graphics as if they were scribbled.
+Scribble is an add on library for [bitlib](http://github.com/bit101/bitlib) to to create paths that look as if they were scribbled. Designed to work with [blcairo](http://github.com/bit101/blcairo).
 
 ![scribbled shapes](scribble.png)
 
