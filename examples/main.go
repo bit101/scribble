@@ -24,7 +24,7 @@ func main() {
 
 func scene1(context *cairo.Context, width, height, percent float64) {
 	context.BlackOnWhite()
-	p := scribble.NewPen(context, 0, 0)
+	p := scribble.NewPen(0, 0)
 
 	p.Line(80, 100, 80, 700, 50000)
 	p.Ellipse(300, 400, 120, 300, 100000)
