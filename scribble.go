@@ -12,7 +12,9 @@ import (
 // Pen represents a pen drawing a scribbled line.
 type Pen struct {
 	x, y, vx, vy, vr, damp, step, curl, pull, reverse float64
+	xmin, ymin, xmax, ymax                            float64
 	points                                            []geom.PointList
+	wrap                                              bool
 }
 
 // NewPen creates a new pen object.
@@ -20,20 +22,26 @@ func NewPen(x, y float64) *Pen {
 	pen := &Pen{
 		x:       x,
 		y:       y,
+		xmin:    0,
+		ymin:    0,
+		xmax:    800,
+		ymax:    800,
 		vx:      0,
 		vy:      0,
 		vr:      0,
 		damp:    0.7,
 		step:    1,
 		reverse: 0.5,
+		wrap:    false,
 	}
 	pen.SetPull(30)
 	pen.SetCurl(30)
 	pen.points = []geom.PointList{}
+	pen.MoveTo(pen.y, pen.y)
 	return pen
 }
 
-// Position returns the pen's current x, y position.
+// GetPosition returns the pen's current x, y position.
 func (p *Pen) GetPosition() (float64, float64) {
 	return p.x, p.y
 }
@@ -82,11 +90,34 @@ func (p *Pen) SetStep(s float64) {
 	p.step = s
 }
 
+// SetWrap sets whether scribbles that go out of wrap bounds will reappaer on the opposite side.
+// Wrapping is really only useful for scribbles that do undirectoed wandering. It does not work
+// well at all when pulling a scribble towards a point,
+// which is used in all the shape drawing methods.
+func (p *Pen) SetWrap(b bool) {
+	p.wrap = b
+}
+
+// SetWrapBound sets the bounds at which scribbles will wrap.
+// Wrapping is really only useful for scribbles that do undirectoed wandering. It does not work
+// well at all when pulling a scribble towards a point,
+// which is used in all the shape drawing methods.
+func (p *Pen) SetWrapBounds(xmin, ymin, xmax, ymax float64) {
+	p.xmin = xmin
+	p.ymin = ymin
+	p.xmax = xmax
+	p.ymax = ymax
+}
+
 // Update updates and draws the path of this pen.
 func (p *Pen) Update() {
 	p.x += p.vx
 	p.y += p.vy
-	p.addCurrentPoint()
+	if p.wrap {
+		p.doWrap()
+	} else {
+		p.addCurrentPoint()
+	}
 
 	p.vr += random.FloatRange(-p.curl*p.reverse, p.curl)
 	p.vx += math.Cos(p.vr) * p.step
@@ -97,6 +128,33 @@ func (p *Pen) Update() {
 
 func (p *Pen) addCurrentPoint() {
 	p.points[len(p.points)-1].AddXY(p.x, p.y)
+}
+
+func (p *Pen) doWrap() {
+	shouldWrap := false
+	xrange := p.xmax - p.xmin
+	yrange := p.ymax - p.ymin
+	if p.x < p.xmin {
+		p.x += xrange
+		shouldWrap = true
+	}
+	if p.x > p.xmax {
+		p.x -= xrange
+		shouldWrap = true
+	}
+	if p.y < p.ymin {
+		p.y += yrange
+		shouldWrap = true
+	}
+	if p.y > p.ymax {
+		p.y -= yrange
+		shouldWrap = true
+	}
+	if shouldWrap {
+		p.MoveTo(p.x, p.y)
+	} else {
+		p.addCurrentPoint()
+	}
 }
 
 // ClearAll deletes all points on all paths.
